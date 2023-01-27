@@ -7,6 +7,8 @@ declare_id!("H5gdZMXhmQNxcWy7Y5YR4qw9Vhp2Dua9BdaVq2sHSfFE");
 
 #[program]
 pub mod community {
+    
+
     use super::*;
 /*####################################################################################################*/
 /*####################################################################################################*/
@@ -30,12 +32,15 @@ pub mod community {
 // #     # #    # #    # #    # #    # #   ## #   #     #   
 //  #####   ####  #    # #    #  ####  #    # #   #     #                                                            
 
-    pub fn create_community(ctx: Context<CreateCommunity>, name: String, id: u64) -> Result<()> {
+    pub fn create_community(ctx: Context<CreateCommunity>, name: String, id: u64,wallet : Pubkey , image_url : String,description: String) -> Result<()> {
         let community = &mut ctx.accounts.community_account;
         community.name = name;
         community.id = id;
         community.owner = *ctx.accounts.community_owner.key;
         community.is_initialized = true;
+        community.image_url = image_url;
+        community.description = description;
+        community.wallet = wallet;
         
         let user_state = &mut ctx.accounts.user_state;
         user_state.add_owned_community(&community.key());
@@ -201,6 +206,36 @@ pub mod community {
     }
     
 
+    pub fn add_token(
+        ctx:  Context<AddToken>,
+        token_mint : Pubkey , 
+        token_account : Pubkey
+    ) -> Result<()> {
+        require!(ctx.accounts.community_account.is_initialized,ErrorCodes::CommunityNotInitialized);
+        require_keys_eq!(ctx.accounts.community_account.owner,ctx.accounts.community_owner.key(),ErrorCodes::UnAuthorized);
+        require!(ctx.accounts.community_account.token_mint == Pubkey::default(),ErrorCodes::CommunityTokenAlreadyExists);
+        // require!(ctx.accounts.community_account.is_token_limit_reached(),ErrorCodes::CommunityTokenLimitReached);
+        let community = &mut ctx.accounts.community_account;
+
+        community.token_mint = token_mint;
+        community.token_account = token_account;
+
+        msg!("Community token added");
+        Ok(())
+    }
+
+    pub fn remove_token(
+        ctx:  Context<RemoveToken>,
+    ) -> Result<()> {
+        require!(ctx.accounts.community_account.is_initialized,ErrorCodes::CommunityNotInitialized);
+        require_keys_eq!(ctx.accounts.community_account.owner,ctx.accounts.community_owner.key(),ErrorCodes::UnAuthorized);
+        let community = &mut ctx.accounts.community_account;
+        community.token_mint = Pubkey::default();
+        community.token_account = Pubkey::default();
+        msg!("Community token removed");
+        Ok(())
+    }
+
 // #     #                                           
 // ##   ## ###### #    # #####  ###### #####   ####  
 // # # # # #      ##  ## #    # #      #    # #      
@@ -281,7 +316,13 @@ pub mod community {
 
 
 #[derive(Accounts)]
-#[instruction(name : String , id : u64)]
+#[instruction(
+    name : String , 
+    id : u64,
+    wallet: Pubkey,
+    image_url : String,
+    description : String
+)]
 pub struct CreateCommunity<'info> {
     #[account(mut)]
     pub community_owner: Signer<'info>,
@@ -319,8 +360,21 @@ pub struct CreateCommunity<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+#[instruction(token_mint : Pubkey, token_account : Pubkey)]
+pub struct AddToken<'info> {
+    #[account(mut)]
+    pub community_account: Account<'info, Community>,
+    pub community_owner : Signer<'info>,
+    pub system_program: Program<'info, System>
+}
 
-
+#[derive(Accounts)]
+pub struct RemoveToken<'info> {
+    #[account(mut)]
+    pub community_account: Account<'info, Community>,
+    pub community_owner : Signer<'info>,
+}
 
 #[derive(Accounts)]
 #[instruction(moderator : Pubkey)]
@@ -386,7 +440,7 @@ pub struct CreateProduct<'info> {
     #[account(
         init_if_needed,
         seeds = [
-            "product".as_bytes(),
+            "community_product".as_bytes(),
             community_account.to_account_info().key.as_ref(),
             &id.to_le_bytes(),
             ],
@@ -530,6 +584,8 @@ pub struct Community {
     pub wallet: Pubkey,
     pub products: Vec<Pubkey>,
     pub is_public: bool,
+    pub image_url: String,
+    pub description: String,
     // pub key : Pubkey,
     // token recycle logic için enum eklenecek
     // force user to buy token and burn pool tokens
@@ -537,7 +593,7 @@ pub struct Community {
 }
 
 impl Community {
-    pub const LEN: usize = 8 + 8 + 32 + 1 + 32 + 32 + 1 + 32 * 100 + 32 * 10 + 32 + 32 * 20 + 1; // 100 char limit , total 1000 byte
+    pub const LEN: usize = 8 + 8 + 32 + 1 + 32 + 32 + 1 + 32 * 100 + 32 * 10 + 32 + 32 * 20 + 1 + 256 + 256;
 }
 
 impl Community {
@@ -699,5 +755,6 @@ pub enum ErrorCodes {
     CommunityProductLimitReached,
     CommunityProductAlreadyExists,
     UserStateAlreadyInitialized,
-    UserStateNotInitialized
+    UserStateNotInitialized,
+    CommunityTokenAlreadyExists
 }
