@@ -1,7 +1,7 @@
 # community_token_solana_contract
 
 will be prettyfied...
-
+```
 
 Community 
 |
@@ -23,3 +23,4 @@ User
 |--> Create State Account [PDA:"user_state"+user.pubkey]
 |--/ Create Community Account [PDA:"community_member"+community_account.pubkey+user.pubkey]
 |--> Edit Community Account 
+```
