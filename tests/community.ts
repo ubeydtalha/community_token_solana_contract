@@ -75,6 +75,15 @@ describe("community", () => {
     program.programId
   )[0]
 
+  const owner_state = anchor.web3.PublicKey.findProgramAddressSync(
+    [
+      anchor.utils.bytes.utf8.encode('user_state'),
+      provider.wallet.publicKey.toBuffer(),
+    ],
+    program.programId
+  )[0]
+
+
 
 
   const custom_member = anchor.web3.Keypair.fromSecretKey(
@@ -98,6 +107,14 @@ describe("community", () => {
     program.programId
   )[0];
 
+  const custom_member_state = anchor.web3.PublicKey.findProgramAddressSync(
+    [
+      anchor.utils.bytes.utf8.encode('user_state'),
+      custom_member.publicKey.toBuffer(),
+    ],
+    program.programId
+  )[0];
+
   let metaplex = Metaplex.make(connection)
   .use(keypairIdentity(user))
   .use(
@@ -107,6 +124,17 @@ describe("community", () => {
       timeout: 60000,
     })
   )
+
+  const community_product_PDA = anchor.web3.PublicKey.findProgramAddressSync(
+    [
+      anchor.utils.bytes.utf8.encode('community_product'),
+      community.toBuffer(),
+      anchor.BN(1).toArrayLike(Buffer, "le", 8),
+    ],
+    program.programId
+  )[0]
+
+
 
 
   //    dP          oo   dP       a88888b.                                                  oo   dP               
@@ -123,18 +151,28 @@ describe("community", () => {
   it("Is initialized!", async () => {
     // Add your test here.
 
+    // Bir Community oluşturuyoruz.
 
-    // let token = SystemProgram.createAccount({
-
-    // })
+    const txx = await program.methods.createUserState().accounts(
+      {
+        owner: provider.wallet.publicKey,
+        userState: owner_state,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      }
+    )
+    .rpc();
 
     const tx = await program.methods.
       createCommunity(
         "hello",
-        new anchor.BN(123)
+        new anchor.BN(123),
+        community_wallet.publicKey,
+        "https://arweave.net/e_s6UUVQXtfyy91R0joZxhc7Di7xzxOHGSPLGpgwu_Q",
+        "Lama Guild",
       ).accounts(
         {
           communityAccount: community,
+          userState: owner_state,
           communityOwner: provider.wallet.publicKey,
           communityMember: community_member_account_owner,
           systemProgram: anchor.web3.SystemProgram.programId,
@@ -155,6 +193,22 @@ describe("community", () => {
 
   it("add_moderator", async () => {
 
+    // Önce kullanıcının state'ini oluşturuyoruz.
+    // Olusturulan community'ye moderator ekliyoruz.
+    // Bu fonksiyon public key'i verilen kullanıcı için community account oluşturur (PDA)
+
+    // Aynı kullanıcıya daha önce state oluşturduğumdan bu adımı atladım
+
+    // const txx = await program.methods.createUserState().accounts(
+    //   {
+    //     owner: provider.wallet.publicKey,
+    //     userState: owner_state,
+    //     systemProgram: anchor.web3.SystemProgram.programId,
+    //   }
+    // )
+    // .rpc();
+
+
     const tx = await program.methods.
       addModerator(
         provider.wallet.publicKey,
@@ -162,6 +216,7 @@ describe("community", () => {
         {
           communityAccount: community,
           communityMember: community_member_account_owner,
+          userState: owner_state,
           owner: provider.wallet.publicKey,
           systemProgram: anchor.web3.SystemProgram.programId,
         }
@@ -184,6 +239,9 @@ describe("community", () => {
 
   it("Edit member data.", async () => {
 
+    // Community member'ın bilgilerini degistiriyoruz.
+    // Community'ye eklenmiş bir kullanıcının community accountunu editliyoruz
+
     const tx = await program.methods.editCommunityMemberData(
       "Test_Name",
       "test.com/profile.png",
@@ -193,6 +251,7 @@ describe("community", () => {
         communityAccount: community,
         communityMember: community_member_account_owner,
         systemProgram: anchor.web3.SystemProgram.programId,
+        
       }
     ).rpc();
 
@@ -215,7 +274,7 @@ describe("community", () => {
 
     //new anchor.web3.Connection(anchor.web3.clusterApiUrl("devnet"));
     // Önce community cüzdanında yeterli miktarda SOL olup olmadığını kontrol ediyoruz.
-    // yoksa ekliyoruz (airdrop)
+    // yoksa ekliyoruz (airdrop) , Devnet için geçerli bu durum
     let community_account_balance = await connection.getBalance(community_wallet.publicKey);
 
     console.log("Community account balance: ", community_account_balance);
@@ -235,19 +294,6 @@ describe("community", () => {
 
 
 
-    
-
-    // Metaplex için gerekli olan birkaç şeyi tanımlıyoruz.
-    // const metaplex = Metaplex.make(connection)
-    //   .use(keypairIdentity(user))
-    //   .use(
-    //     bundlrStorage({
-    //       address: "https://devnet.bundlr.network",
-    //       providerUrl: "https://api.devnet.solana.com",
-    //       timeout: 60000,
-    //     })
-    //   )
-
     let payer = community_wallet.payer;
     // Tokenımızın mint hesabını oluşturuyoruz
     if (!mint ){
@@ -260,26 +306,39 @@ describe("community", () => {
       );
     }
 
-    // // Tokenımızın metadatalarını yüklüyoruz
-    // const metadata = await uploadTokenMetadata(
-    //   metaplex = metaplex,
-    //   name = name,
-    //   description = description,
-    //   mint = mint,
-    //   user = community_wallet
-    // );
+    // Community cüzdanına token hesabı oluşturuyoruz
+    const tokenAccount = await createTokenAccount(
+      connection,
+      community_wallet.payer,
+      mint,
+      community_wallet_keypair.publicKey,
+    );
 
-
-    // // Tokena sahip olacak kullanıcının Associated Token Account'unu oluşturuyoruz.
-    // const tokenAccount = await createTokenAccount(
-    //   connection = connection,
-    //   payer = user,
-    //   mint = mint,
-    //   owner = community,
-    // );
-
+    // Community accountuna mint ve token adreslerini ekliyoruz
+    const tx = await program.methods.addToken(
+      mint,
+      tokenAccount.address).accounts(
+        {
+          communityAccount: community,
+          communityOwner: provider.wallet.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+        }
+      ).rpc();
+      
+    console.log("Your transaction signature", tx);
 
   });
+
+
+  // dP     dP          dP                         dP    d888888P          dP                            888888ba             dP            
+  // 88     88          88                         88       88             88                            88    `8b            88            
+  // 88     88 88d888b. 88 .d8888b. .d8888b. .d888b88       88    .d8888b. 88  .dP  .d8888b. 88d888b.    88     88 .d8888b. d8888P .d8888b. 
+  // 88     88 88'  `88 88 88'  `88 88'  `88 88'  `88       88    88'  `88 88888"   88ooood8 88'  `88    88     88 88'  `88   88   88'  `88 
+  // Y8.   .8P 88.  .88 88 88.  .88 88.  .88 88.  .88       88    88.  .88 88  `8b. 88.  ... 88    88    88    .8P 88.  .88   88   88.  .88 
+  // `Y88888P' 88Y888P' dP `88888P' `88888P8 `88888P8       dP    `88888P' dP   `YP `88888P' dP    dP    8888888P  `88888P8   dP   `88888P8 
+  //           88                                                                                                                           
+  //           dP                                                                                                                           
+  
 
   it("Upload token metadata.", async () => {
 
@@ -311,23 +370,45 @@ describe("community", () => {
 
   });
 
+
+
+  // a88888b.                              dP               d888888P          dP                             .d888888                                                 dP   
+  // d8'   `88                              88                  88             88                            d8'    88                                                 88   
+  // 88        88d888b. .d8888b. .d8888b. d8888P .d8888b.       88    .d8888b. 88  .dP  .d8888b. 88d888b.    88aaaaa88a .d8888b. .d8888b. .d8888b. dP    dP 88d888b. d8888P 
+  // 88        88'  `88 88ooood8 88'  `88   88   88ooood8       88    88'  `88 88888"   88ooood8 88'  `88    88     88  88'  `"" 88'  `"" 88'  `88 88    88 88'  `88   88   
+  // Y8.   .88 88       88.  ... 88.  .88   88   88.  ...       88    88.  .88 88  `8b. 88.  ... 88    88    88     88  88.  ... 88.  ... 88.  .88 88.  .88 88    88   88   
+  //  Y88888P' dP       `88888P' `88888P8   dP   `88888P'       dP    `88888P' dP   `YP `88888P' dP    dP    88     88  `88888P' `88888P' `88888P' `88888P' dP    dP   dP   
+ 
+
   it("Create token account for user.", async () => {
 
     // let mint = new anchor.web3.PublicKey("2UiH979Y8D76PhsXJihnL7AEZtvhaf2zwi9nqNRSXykV");
     // Tokena sahip olacak kullanıcının Associated Token Account'unu oluşturuyoruz.
-    
+    // bu işlem tüm üyeler için yapılmalıdır
     const tokenAccount = await createTokenAccount(
       connection,
       community_wallet.payer,
       mint,
-      murat,
+      custom_member_public_key,
     );
 
       
       
   });
 
+
+  // 8888ba.88ba  oo            dP      d888888P          dP                         
+  // 88  `8b  `8b               88         88             88                         
+  // 88   88   88 dP 88d888b. d8888P       88    .d8888b. 88  .dP  .d8888b. 88d888b. 
+  // 88   88   88 88 88'  `88   88         88    88'  `88 88888"   88ooood8 88'  `88 
+  // 88   88   88 88 88    88   88         88    88.  .88 88  `8b. 88.  ... 88    88 
+  // dP   dP   dP dP dP    dP   dP         dP    `88888P' dP   `YP `88888P' dP    dP 
+                                                                                  
+                                                                                  
+  
+
   it("Mint token.", async () => {
+    // tokenımızı mint ediyoruz ve istediğimiz kullanıcıya veriyoruz
     let tx = await mintToken(
       connection,
       community_wallet.payer,
@@ -340,6 +421,40 @@ describe("community", () => {
     console.log("Mint token tx: ", tx);
     
   });
+
+
+  // a88888b.                              dP                888888ba                          dP                     dP   
+  // d8'   `88                              88                88    `8b                         88                     88   
+  // 88        88d888b. .d8888b. .d8888b. d8888P .d8888b.    a88aaaa8P' 88d888b. .d8888b. .d888b88 dP    dP .d8888b. d8888P 
+  // 88        88'  `88 88ooood8 88'  `88   88   88ooood8     88        88'  `88 88'  `88 88'  `88 88    88 88'  `""   88   
+  // Y8.   .88 88       88.  ... 88.  .88   88   88.  ...     88        88       88.  .88 88.  .88 88.  .88 88.  ...   88   
+  //  Y88888P' dP       `88888P' `88888P8   dP   `88888P'     dP        dP       `88888P' `88888P8 `88888P' `88888P'   dP   
+                                                                                                                      
+
+  it("Create community product", async () => {
+
+    let tx = await program.methods.createCommunityProduct(
+      new anchor.BN(1),
+      "1 Community Token",
+      "1 Community Token Description",
+      "https://www.arweave.net/1",
+      1.0,
+      0.001,
+      0.002,
+    ).accounts({
+      communityAccount: community_account.publicKey,
+      owner: provider.wallet.publicKey,
+      product: community_product.publicKey,
+      systemProgram: anchor.web3.SystemProgram.programId,
+    }).rpc();
+
+    console.log("Create community product tx: ", tx);
+    
+
+  });
+
+
+
 
 });
 
