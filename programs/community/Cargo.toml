@@ -19,3 +19,4 @@ development = []
 
 [dependencies]
 anchor-lang = {version = "0.26.0", features = ["init-if-needed"]}
+solana-program = "1.14.13"

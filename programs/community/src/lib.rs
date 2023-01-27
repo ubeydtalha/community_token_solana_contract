@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use solana_program::pubkey::Pubkey;
 #[cfg(not(feature = "development"))]
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 #[cfg(feature = "development")]
@@ -36,6 +37,9 @@ pub mod community {
         community.owner = *ctx.accounts.community_owner.key;
         community.is_initialized = true;
         
+        let user_state = &mut ctx.accounts.user_state;
+        user_state.add_owned_community(&community.key());
+
         // community.key = community.to_account_info().key();
         msg!("Community created");
         Ok(())
@@ -53,6 +57,11 @@ pub mod community {
         // community_member.moderated_communities.push(ctx.accounts.community_account.key());
         let community = &mut ctx.accounts.community_account;
         community.moderators.push(user.key());
+
+        let user_state = &mut ctx.accounts.user_state;
+        user_state.add_moderated_community(&community.key());
+
+
         msg!("Moderator added to community");
         Ok(())
     }
@@ -67,6 +76,10 @@ pub mod community {
         // community_member.member_communities.push(ctx.accounts.community_account.key());
         let community = &mut ctx.accounts.community_account;
         community.users.push(user.key());
+
+        let user_state = &mut ctx.accounts.user_state;
+        user_state.add_joined_community(&community.key());
+
         msg!("User added to community");
         Ok(())
     }
@@ -81,10 +94,11 @@ pub mod community {
         // community_member.moderated_communities.retain(|&x| x != ctx.accounts.community_account.key());
         let community = &mut ctx.accounts.community_account;
         community.moderators.retain(|&x| x != user.key());
+
+        let user_state = &mut ctx.accounts.user_state;
+        user_state.remove_moderated_community(&community.key());
+
         msg!("Moderator removed from community");
-
-
-
         Ok(())
     }
 
@@ -98,6 +112,10 @@ pub mod community {
         // community_member.member_communities.retain(|&x| x != ctx.accounts.community_account.key());
         let community = &mut ctx.accounts.community_account;
         community.users.retain(|&x| x != user.key());
+
+        let user_state = &mut ctx.accounts.user_state;
+        user_state.remove_joined_community(&community.key());
+
         msg!("User removed from community");
         Ok(())
     }
@@ -106,6 +124,12 @@ pub mod community {
         require_keys_eq!(ctx.accounts.community_account.owner,ctx.accounts.community_owner.key(),ErrorCodes::UnAuthorized);
         let community = &mut ctx.accounts.community_account;
         community.is_initialized = false;
+
+        let user_state = &mut ctx.accounts.user_state;
+        user_state.remove_owned_community(&community.key());
+        
+        
+
         msg!("Community deleted");
         Ok(())
     }
@@ -185,7 +209,22 @@ pub mod community {
 // #     # #      #    # #    # #      #   #  #    # 
 // #     # ###### #    # #####  ###### #    #  ####  
 
+    pub fn create_user_state(ctx: Context<CreateUserState>) -> Result<()> {
+        require!(ctx.accounts.user_state.is_initialized,ErrorCodes::UserStateAlreadyInitialized);
+        let user_state = &mut ctx.accounts.user_state;
+        user_state.is_initialized = true;
+        msg!("User state created");
+        Ok(())
+    }
 
+    pub fn remove_community_in_state(ctx: Context<RemoveCommunity>) -> Result<()> {
+        require!(ctx.accounts.user_state.is_initialized,ErrorCodes::UserStateNotInitialized);
+        let user_state = &mut ctx.accounts.user_state;
+        user_state.remove_joined_community(&ctx.accounts.community_account.key());
+        user_state.remove_moderated_community(&ctx.accounts.community_account.key());
+        msg!("Community removed from user state");
+        Ok(())
+    }
 
 
     // This function for change user name and profile picture url
@@ -247,6 +286,9 @@ pub struct CreateCommunity<'info> {
     #[account(mut)]
     pub community_owner: Signer<'info>,
 
+    #[account(mut)]
+    pub user_state: Account<'info, UserState>,
+
     #[account(
         init_if_needed,
         seeds = [
@@ -285,9 +327,12 @@ pub struct CreateCommunity<'info> {
 pub struct AddOrRemoveModerator<'info> {
     #[account(mut)]
     pub community_account: Account<'info, Community>,
-
     pub owner : Signer<'info>,
     
+    #[account(mut)] // derrived seed : "user_state" + user_publikey
+    pub user_state: Account<'info, UserState>,
+
+
     #[account(
         init_if_needed,
         seeds = [
@@ -311,6 +356,9 @@ pub struct AddOrRemoveUser<'info> {
     #[account(mut)]
     pub community_account: Account<'info, Community>,
     pub owner : Signer<'info>,
+
+    #[account(mut)] // derrived seed : "user_state" + user_publikey
+    pub user_state: Account<'info, UserState>,
 
     #[account(
         init_if_needed,
@@ -374,6 +422,39 @@ pub struct DeleteProduct<'info> {
 
 
 #[derive(Accounts)]
+pub struct CreateUserState <'info> {
+    #[account(mut)]
+    
+    pub owner : Signer<'info>,
+
+    #[account(
+        init_if_needed,
+        seeds = [
+            "user_state".as_bytes(),
+            owner.key.as_ref()
+            ],
+        payer = owner,
+        space = UserState::LEN,
+        bump,
+    )]
+    pub user_state: Account<'info, UserState>,
+
+    pub system_program: Program<'info, System>,
+}
+
+
+#[derive(Accounts)]
+pub struct RemoveCommunity<'info> {
+    #[account(mut)]
+    pub community_account: Account<'info, Community>,
+    pub owner : Signer<'info>,
+    pub user_state: Account<'info, UserState>,
+
+    pub system_program: Program<'info, System>,
+}
+
+
+#[derive(Accounts)]
 #[instruction(name : String, profile_picture_url : String , member : Pubkey)]
 pub struct EditMemberData<'info> {
 
@@ -395,6 +476,8 @@ pub struct EditMemberData<'info> {
 
     pub system_program: Program<'info, System>,
 }
+
+
 
 
     //  #######                                    
@@ -464,11 +547,11 @@ impl Community {
     }
 
     pub fn is_moderator(&self, moderator: &Pubkey) -> bool {
-        self.moderators.contains(moderator)
+        self.moderators.contains(moderator) || self.is_owner(moderator)
     }
 
     pub fn is_user(&self, user: &Pubkey) -> bool {
-        self.users.contains(user)
+        self.users.contains(user) || self.is_moderator(user)
     }
 
     pub fn is_user_limit_reached(&self) -> bool {
@@ -536,8 +619,71 @@ impl CommunityMember {
 }
 
 
+#[account]
+pub struct UserState {
+    pub owner: Pubkey,
+    pub is_initialized: bool,
+    pub joined_communities: Vec<Pubkey>,
+    pub moderated_communities: Vec<Pubkey>,
+    pub owned_communities: Vec<Pubkey>,
+    pub bump: u8,
+    
+}
 
+impl UserState {
+    pub const LEN: usize = 32 + 1 + 32 * 100 + 32 * 100 + 32 * 100 + 1; // 100 community limit , total 1000 byte
+}
 
+impl UserState {
+    pub fn is_community_joined(&self, community: &Pubkey) -> bool {
+        self.joined_communities.contains(community) || self.is_community_owned(community)
+    }
+
+    pub fn is_community_moderated(&self, community: &Pubkey) -> bool {
+        self.moderated_communities.contains(community) || self.is_community_owned(community)
+    }
+
+    pub fn add_joined_community(&mut self, community: &Pubkey) {
+        if !self.is_community_joined(community) {
+            self.joined_communities.push(*community);
+        }
+    }
+
+    pub fn add_moderated_community(&mut self, community: &Pubkey) {
+        if !self.is_community_moderated(community) {
+            self.moderated_communities.push(*community);
+        }
+    }
+
+    pub fn remove_joined_community(&mut self, community: &Pubkey) {
+        if self.is_community_joined(community) {
+            self.joined_communities.retain(|&x| x != *community);
+        }
+    }
+
+    pub fn remove_moderated_community(&mut self, community: &Pubkey) {
+        if self.is_community_moderated(community) {
+            self.moderated_communities.retain(|&x| x != *community);
+        }
+    }
+
+    pub fn is_community_owned(&self, community: &Pubkey) -> bool {
+        self.owned_communities.contains(community)
+    }
+
+    pub fn add_owned_community(&mut self, community: &Pubkey) {
+        if !self.is_community_owned(community) {
+            self.owned_communities.push(*community);
+        }
+    }
+
+    pub fn remove_owned_community(&mut self, community: &Pubkey) {
+        if self.is_community_owned(community) {
+            self.owned_communities.retain(|&x| x != *community);
+        }
+    }
+
+}
 
 
 
@@ -552,4 +698,6 @@ pub enum ErrorCodes {
     UserNotMember,
     CommunityProductLimitReached,
     CommunityProductAlreadyExists,
+    UserStateAlreadyInitialized,
+    UserStateNotInitialized
 }
