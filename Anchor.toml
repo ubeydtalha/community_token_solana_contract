@@ -1,0 +1,17 @@
+[features]
+seeds = false
+skip-lint = false
+[programs.localnet]
+community = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
+[programs.devnet]
+community = "H5gdZMXhmQNxcWy7Y5YR4qw9Vhp2Dua9BdaVq2sHSfFE"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "devnet"
+wallet = "/home/ubeyd/.config/solana/id.json"
+
+[scripts]
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
