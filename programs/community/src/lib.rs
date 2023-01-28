@@ -150,10 +150,10 @@ pub mod community {
         old_price : f64,
     ) -> Result<()> {
         require!(ctx.accounts.community_account.is_initialized,ErrorCodes::CommunityNotInitialized);
-        require!(ctx.accounts.community_account.is_moderator(ctx.accounts.owner.key),ErrorCodes::UnAuthorized);
-        require!(ctx.accounts.community_account.is_product_limit_reached(),ErrorCodes::CommunityProductLimitReached);
+        require!(ctx.accounts.community_account.is_moderator(ctx.accounts.sender.key) ,ErrorCodes::UnAuthorized);
+        require!(!ctx.accounts.community_account.is_product_limit_reached(),ErrorCodes::CommunityProductLimitReached);
         let product = &mut ctx.accounts.product;
-        require!(ctx.accounts.community_account.has_product(&product.key()),ErrorCodes::CommunityProductAlreadyExists);
+        require!(!ctx.accounts.community_account.has_product(&product.key()),ErrorCodes::CommunityProductAlreadyExists);
 
         
         product.id = id;
@@ -181,7 +181,7 @@ pub mod community {
         old_price : f64,
     ) -> Result<()> {
         require!(ctx.accounts.community_account.is_initialized,ErrorCodes::CommunityNotInitialized);
-        require!(ctx.accounts.community_account.is_moderator(ctx.accounts.owner.key),ErrorCodes::UnAuthorized);
+        require!(ctx.accounts.community_account.is_moderator(ctx.accounts.sender.key),ErrorCodes::UnAuthorized);
         let product = &mut ctx.accounts.product;
         product.id = id;
         product.title = title;
@@ -245,7 +245,7 @@ pub mod community {
 // #     # ###### #    # #####  ###### #    #  ####  
 
     pub fn create_user_state(ctx: Context<CreateUserState>) -> Result<()> {
-        require!(ctx.accounts.user_state.is_initialized,ErrorCodes::UserStateAlreadyInitialized);
+        // require!(ctx.accounts.user_state.is_initialized,ErrorCodes::UserStateAlreadyInitialized);
         let user_state = &mut ctx.accounts.user_state;
         user_state.is_initialized = true;
         msg!("User state created");
@@ -365,6 +365,7 @@ pub struct CreateCommunity<'info> {
 pub struct AddToken<'info> {
     #[account(mut)]
     pub community_account: Account<'info, Community>,
+    #[account(mut)]
     pub community_owner : Signer<'info>,
     pub system_program: Program<'info, System>
 }
@@ -373,7 +374,9 @@ pub struct AddToken<'info> {
 pub struct RemoveToken<'info> {
     #[account(mut)]
     pub community_account: Account<'info, Community>,
+    #[account(mut)]
     pub community_owner : Signer<'info>,
+    pub system_program: Program<'info, System>
 }
 
 #[derive(Accounts)]
@@ -381,6 +384,7 @@ pub struct RemoveToken<'info> {
 pub struct AddOrRemoveModerator<'info> {
     #[account(mut)]
     pub community_account: Account<'info, Community>,
+    #[account(mut)]
     pub owner : Signer<'info>,
     
     #[account(mut)] // derrived seed : "user_state" + user_publikey
@@ -409,6 +413,7 @@ pub struct AddOrRemoveModerator<'info> {
 pub struct AddOrRemoveUser<'info> {
     #[account(mut)]
     pub community_account: Account<'info, Community>,
+    #[account(mut)]
     pub owner : Signer<'info>,
 
     #[account(mut)] // derrived seed : "user_state" + user_publikey
@@ -435,16 +440,21 @@ pub struct AddOrRemoveUser<'info> {
 pub struct CreateProduct<'info> {
     #[account(mut)]
     pub community_account: Account<'info, Community>,
+    #[account(mut)]
     pub owner : Signer<'info>,
+
+
+    /// CHECK: if the user is a moderator or the owner of the community
+    pub sender : AccountInfo<'info>,
 
     #[account(
         init_if_needed,
         seeds = [
             "community_product".as_bytes(),
-            community_account.to_account_info().key.as_ref(),
+            community_account.key().as_ref(),
             &id.to_le_bytes(),
             ],
-        payer = community_account,
+        payer = owner,
         space = CommunityProduct::LEN,
         bump,
     )]
@@ -457,6 +467,7 @@ pub struct CreateProduct<'info> {
 pub struct DeleteProduct<'info> {
     #[account(mut)]
     pub community_account: Account<'info, Community>,
+    #[account(mut)]
     pub owner : Signer<'info>,
 
     #[account(mut)]
@@ -478,7 +489,6 @@ pub struct DeleteProduct<'info> {
 #[derive(Accounts)]
 pub struct CreateUserState <'info> {
     #[account(mut)]
-    
     pub owner : Signer<'info>,
 
     #[account(
@@ -501,7 +511,9 @@ pub struct CreateUserState <'info> {
 pub struct RemoveCommunity<'info> {
     #[account(mut)]
     pub community_account: Account<'info, Community>,
+    #[account(mut)]
     pub owner : Signer<'info>,
+    #[account(mut)]
     pub user_state: Account<'info, UserState>,
 
     pub system_program: Program<'info, System>,
@@ -593,10 +605,26 @@ pub struct Community {
 }
 
 impl Community {
-    pub const LEN: usize = 8 + 8 + 32 + 1 + 32 + 32 + 1 + 32 * 100 + 32 * 10 + 32 + 32 * 20 + 1 + 256 + 256;
+    pub const LEN: usize = 8 // default 
+                        + 32 // name
+                        + 8 // id
+                        + 32 // owner
+                        + 1 // is_initialized
+                        + 32 // token_mint
+                        + 32 // token_account
+                        + 1 // bump
+                        + 32 * 100 // users
+                        + 32 * 10 // moderators
+                        + 32 // wallet
+                        + 32 * 10 // products
+                        + 1 // is_public
+                        + 256 // image_url
+                        + 256; // description
 }
 
 impl Community {
+
+    
 
     pub fn is_owner(&self, owner: &Pubkey) -> bool {
         self.owner == *owner
@@ -645,7 +673,17 @@ pub struct CommunityProduct {
 }
 
 impl CommunityProduct {
-    pub const LEN: usize = 32 * 100 + 32 * 100 + 32 * 100 + 8 + 8 + 8 + 8 + 1 + 32 + 1; // 100 char limit , total 1000 byte
+    pub const LEN: usize = 8 // default 
+                        + 32 // title
+                        + 256 // description
+                        + 256 // image_url
+                        + 8 // value
+                        + 8 // price
+                        + 8 // old_price
+                        + 8 // id
+                        + 1 // bump
+                        + 32 // community
+                        + 1; // is_initialized
 }
 
 
@@ -671,8 +709,16 @@ pub struct CommunityMember {
 }
 
 impl CommunityMember {
-    pub const LEN: usize = 8 + 8 + 32 + 1 + 32 + 32 + 1 + 250 ; // 10 community limit , total 1000 byte+ 32 * 10 + 32 * 10
-}
+    pub const LEN: usize = 8 // default 
+                        + 32 // name
+                        + 8 // id
+                        + 32 // owner
+                        + 1 // is_initialized
+                        + 32 // token_mint
+                        + 32 // token_account
+                        + 1 // bump
+                        + 256; // profile_picture_url
+                }
 
 
 #[account]
@@ -687,7 +733,13 @@ pub struct UserState {
 }
 
 impl UserState {
-    pub const LEN: usize = 32 + 1 + 32 * 100 + 32 * 100 + 32 * 100 + 1; // 100 community limit , total 1000 byte
+    pub const LEN: usize = 8 // default 
+                        + 32 // owner
+                        + 1 // is_initialized
+                        + 32 * 10 // joined_communities
+                        + 32 * 10 // moderated_communities
+                        + 32 * 10 // owned_communities
+                        + 1; // bump
 }
 
 impl UserState {
