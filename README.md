@@ -1,5 +1,8 @@
 # community_token_solana_contract
-.
+
+Solana Play Ground usage videos for this repo : 
+https://loom.com/share/folder/1f864f7bad234f429878ed02589d78c1
+
 ```
 
 Community 
