@@ -46,8 +46,7 @@ By using the tokens you produce with API support by other applications, you will
 
 # Kullanım kılavuzu - Guide
 
-## User State Account
-
+##  User State Account
 > TR
 - Her şeyden önce programın sizin state'inizi tutabilmesi için `createUserState()` metodu ile kendinize yada kullanıcıya account oluşturmalısınız.
 - Bu metod bir PDA ile state account'u üretir.
@@ -99,3 +98,55 @@ D -..- Q5
 D -..- Q6
 
 ```
+## Create Community
+
+> TR
+>  - 	State accountunuzu oluşturduktan sonra , komünite oluşturabilirsiniz.
+>  - Bunun için komünitenizin PDA ile public keyini belirtilen seedlere göre üretmelisiniz ve komüniteniz için bir cüzdan oluşturmalısınız. Frontend tarafında bu otomatik yapılacak.
+>  -  `createCommunity()` metodu ile argümentleri ve accountları verdikten sonra bir komünite accountu oluşturabilirsiniz.
+>
+> **PDA üretirken verdiğiniz id ve isim , oluşturukende aynı olmalıdır.**
+
+>EN
+> - After creating your state account, you can create a community.
+> - For this, you must generate the public key of your community with the PDA according to the specified seeds.
+> - You can create a community account after giving the arguments and accounts with the `createCommunity()` method.
+> 
+> **The id and name you gave while generating the PDA must be the same as when creating it.**
+```ts
+
+const  community_wallet_keypair = anchor.web3.Keypair.generate();
+let  community_wallet = new  anchor.Wallet(community_wallet_keypair);
+
+const  community = anchor.web3.PublicKey.findProgramAddressSync(
+	[
+		anchor.utils.bytes.utf8.encode('community'),
+		anchor.utils.bytes.utf8.encode('new_community'),
+		new  anchor.BN(2).toArrayLike(Buffer, "le", 8),
+		provider.wallet.publicKey.toBuffer(),
+	],
+		program.programId
+)[0];
+
+const  tx = await  program.methods.
+
+createCommunity(
+	"new_community",
+	new  anchor.BN(2),
+	community_wallet.publicKey,
+	"https://arweave.net/e_s6UUVQXtfyy91R0joZxhc7Di7xzxOHGSPLGpgwu_Q",
+	"Description",
+).accounts(
+	{
+		communityAccount:  community,
+		userState:  owner_state,
+		communityOwner:  provider.wallet.publicKey,
+		communityMember:  community_member_account_owner,
+		systemProgram:  anchor.web3.SystemProgram.programId,
+	}
+).rpc();
+console.log("Your transaction signature", tx);
+
+```
+
+
