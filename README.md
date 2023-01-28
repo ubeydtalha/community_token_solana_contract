@@ -27,12 +27,12 @@ User
 
 
 > TR
-Bu projede kendi içinde ticaret yapan komünitelerin , ticaretlerinde kendi tokenlarını kullanarak güvenli para transferi yapmasını sağlayan bir sistem yapılmıştır.
-Bir komüniti oluşturup , kendinize ait token üretebilirsiniz ve bu tokenı üyelerinize satabilmeniz için ürün oluşturabilirsiniz.
+> Bu projede kendi içinde ticaret yapan komünitelerin , ticaretlerinde kendi tokenlarını kullanarak güvenli para transferi yapmasını sağlayan bir sistem yapılmıştır.
+> Bir komüniti oluşturup , kendinize ait token üretebilirsiniz ve bu tokenı üyelerinize satabilmeniz için ürün oluşturabilirsiniz.
 
 > EN
-In this project, a system was created that enables the communities that trade within themselves to transfer money securely by using their own tokens in their trade.
-You can create a community, generate your own token, and create a product so that you can sell this token to your members.
+> In this project, a system was created that enables the communities that trade within themselves to transfer money securely by using their own tokens in their trade.
+> You can create a community, generate your own token, and create a product so that you can sell this token to your members.
 
 
 # Future
